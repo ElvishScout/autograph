@@ -11,6 +11,9 @@ import {
   getTopLeftFromAnchorPoint,
 } from './anchor'
 
+/** Vertical gap between the container title band and the content area (px) */
+export const TITLE_CONTENT_GAP = 8
+
 /**
  * Given a scoped node ID (e.g. "w1.proc") and a container prefix (e.g. ""),
  * returns the direct child ID of that container (e.g. "w1").
@@ -35,12 +38,17 @@ function resolveDirectChildId(
 /**
  * Performs automatic Sugiyama-like topological layered layout for `autoNodes`
  * inside a container with `config`.
+ *
+ * `primarySeed` is the primary-axis cursor start: when siblings were placed
+ * with explicit absolute coordinates, auto nodes flow after them along the
+ * container's flow direction instead of collapsing back onto the origin.
  */
 function layoutAutoNodes(
   autoNodes: GraphNodeIR[],
   containerPrefix: string,
   allEdges: GraphEdgeIR[],
   config: ContainerConfig,
+  primarySeed = 0,
 ): void {
   if (autoNodes.length === 0) return
 
@@ -181,7 +189,7 @@ function layoutAutoNodes(
   for (let r = 0; r <= maxRank; r++) orderedRanks.push(r)
   if (isReversed) orderedRanks.reverse()
 
-  let primaryCursor = 0
+  let primaryCursor = primarySeed
   for (const r of orderedRanks) {
     const layer = layers.get(r) ?? []
     const pSize = layerPrimarySize[r]
@@ -208,6 +216,10 @@ function layoutAutoNodes(
 
 /**
  * Bottom-up layout for a single container (either `<ag-graph>`, `<group>`, or a `<define>` composite).
+ *
+ * `titleOffsetY` reserves a band at the top of the content area for the container
+ * title; all children are shifted down by it after positioning. `titleWidth`
+ * keeps auto-width containers wide enough to fit their title.
  */
 function layoutContainer(
   children: GraphNodeIR[],
@@ -217,10 +229,14 @@ function layoutContainer(
   globalNodeMap: Map<string, GraphNodeIR>,
   intrinsicWidth: number,
   intrinsicHeight: number,
+  titleOffsetY = 0,
+  titleWidth = 0,
 ): { width: number; height: number } {
   // 1. Recursively layout any child containers first (Bottom-Up)
   for (const child of children) {
     if (child.isContainer && child.children.length > 0) {
+      const childTitleOffsetY =
+        child.titleHeight > 0 ? child.titleHeight + TITLE_CONTENT_GAP : 0
       const childSize = layoutContainer(
         child.children,
         child.id,
@@ -229,6 +245,8 @@ function layoutContainer(
         globalNodeMap,
         child.intrinsicWidth,
         child.intrinsicHeight,
+        childTitleOffsetY,
+        child.titleWidth,
       )
       child.width = child.containerConfig.explicitWidth ?? childSize.width
       child.height = child.containerConfig.explicitHeight ?? childSize.height
@@ -248,8 +266,21 @@ function layoutContainer(
     (c) => c.positionSpec.mode === 'parent-anchor',
   )
 
-  // 3. Layout auto nodes
-  layoutAutoNodes(autoNodes, containerPrefix, allEdges, config)
+  // 3. Layout auto nodes. Explicitly positioned ABSOLUTE siblings extend the
+  // flow origin so auto nodes continue after them instead of collapsing onto
+  // the content origin and overlapping them. (Relative siblings are excluded:
+  // they are already chained to their targets, and seeding from them would
+  // push unrelated auto nodes far away.)
+  const isHorizontalFlow = config.direction === 'LR' || config.direction === 'RL'
+  let primarySeed = 0
+  if (autoNodes.length > 0 && absNodes.length > 0) {
+    if (isHorizontalFlow) {
+      primarySeed = Math.max(0, ...absNodes.map((n) => n.x + n.width)) + config.gapX
+    } else {
+      primarySeed = Math.max(0, ...absNodes.map((n) => n.y + n.height)) + config.gapY
+    }
+  }
+  layoutAutoNodes(autoNodes, containerPrefix, allEdges, config, primarySeed)
 
   // 4. Layout absolute nodes
   for (const n of absNodes) {
@@ -408,14 +439,15 @@ function layoutContainer(
     maxY = Math.max(maxY, pn.height)
   }
 
-  // Determine content box width & height
+  // Determine content box width & height (the title band eats into the
+  // explicit-height budget, since it sits at the top of the content area)
   const contentWidth =
     config.explicitWidth !== undefined
       ? Math.max(0, config.explicitWidth - config.paddingX * 2)
       : maxX
   const contentHeight =
     config.explicitHeight !== undefined
-      ? Math.max(0, config.explicitHeight - config.paddingY * 2)
+      ? Math.max(0, config.explicitHeight - config.paddingY * 2 - titleOffsetY)
       : maxY
 
   // 7. Place parent-anchor nodes (only `anchor` specified without `target` -> relative to parent container)
@@ -452,12 +484,40 @@ function layoutContainer(
     }
   }
 
-  const finalMaxX =
-    children.length > 0 ? Math.max(contentWidth, ...children.map((n) => n.x + n.width)) : contentWidth
-  const finalMaxY =
-    children.length > 0
-      ? Math.max(contentHeight, ...children.map((n) => n.y + n.height))
-      : contentHeight
+  // 8. Account for the title band: child coordinates stay in content space
+  // (computeAbsoluteCoordinates already offsets them below the title); only the
+  // total-size bookkeeping adds the band back in.
+  const contentExtentX =
+    children.length > 0 ? Math.max(...children.map((n) => n.x + n.width)) : 0
+  const contentExtentY =
+    children.length > 0 ? Math.max(...children.map((n) => n.y + n.height)) : 0
+
+  const finalMaxX = Math.max(contentWidth, contentExtentX, titleWidth)
+  const finalMaxY = Math.max(
+    contentHeight + titleOffsetY,
+    titleOffsetY,
+    contentExtentY + titleOffsetY,
+  )
+
+  // Warn when an explicit container size cannot hold its laid-out content
+  // (previously children just overflowed silently)
+  if (config.explicitWidth !== undefined && finalMaxX > contentWidth + 0.5) {
+    console.error(
+      `[autograph] Container "${containerPrefix || '<root>'}" is too narrow: ` +
+        `explicit width ${config.explicitWidth}px (content area ${contentWidth}px) ` +
+        `but content needs ${Math.ceil(finalMaxX)}px. Children overflow.`,
+    )
+  }
+  if (config.explicitHeight !== undefined) {
+    const availableHeight = config.explicitHeight - config.paddingY * 2
+    if (finalMaxY > availableHeight + 0.5) {
+      console.error(
+        `[autograph] Container "${containerPrefix || '<root>'}" is too short: ` +
+          `explicit height ${config.explicitHeight}px (content area ${availableHeight}px) ` +
+          `but content needs ${Math.ceil(finalMaxY)}px. Children overflow.`,
+      )
+    }
+  }
 
   const totalWidth =
     config.explicitWidth ?? Math.ceil(finalMaxX + config.paddingX * 2)
@@ -479,16 +539,19 @@ function computeAbsoluteCoordinates(
     node.absX = originX + node.x
     node.absY = originY + node.y
     if (node.isContainer && node.children.length > 0) {
+      const childTitleOffsetY =
+        node.titleHeight > 0 ? node.titleHeight + TITLE_CONTENT_GAP : 0
       computeAbsoluteCoordinates(
         node.children,
         node.absX + node.containerConfig.paddingX,
-        node.absY + node.containerConfig.paddingY,
+        node.absY + node.containerConfig.paddingY + childTitleOffsetY,
       )
     }
   }
 }
 
 export function runLayoutEngine(graph: GraphIR): void {
+  const rootTitleOffsetY = graph.titleHeight > 0 ? graph.titleHeight + TITLE_CONTENT_GAP : 0
   const rootSize = layoutContainer(
     graph.nodes,
     '',
@@ -497,6 +560,8 @@ export function runLayoutEngine(graph: GraphIR): void {
     graph.nodeMap,
     0,
     0,
+    rootTitleOffsetY,
+    graph.titleWidth,
   )
   graph.width = rootSize.width
   graph.height = rootSize.height
@@ -504,6 +569,6 @@ export function runLayoutEngine(graph: GraphIR): void {
   computeAbsoluteCoordinates(
     graph.nodes,
     graph.config.paddingX,
-    graph.config.paddingY,
+    graph.config.paddingY + rootTitleOffsetY,
   )
 }

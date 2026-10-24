@@ -41,13 +41,23 @@ export function placeAllEdgeLabels(graph: GraphIR): void {
         width: node.width,
         height: node.height,
       })
-    } else if (node.overlayWidth > 0 && node.overlayHeight > 0) {
-      nodeBoxes.push({
-        x: node.absX + node.containerConfig.paddingX,
-        y: node.absY + node.containerConfig.paddingY,
-        width: node.overlayWidth,
-        height: node.overlayHeight,
-      })
+    } else {
+      if (node.overlayWidth > 0 && node.overlayHeight > 0) {
+        nodeBoxes.push({
+          x: node.absX + node.containerConfig.paddingX,
+          y: node.absY + node.containerConfig.paddingY,
+          width: node.overlayWidth,
+          height: node.overlayHeight,
+        })
+      }
+      if (node.titleWidth > 0 && node.titleHeight > 0) {
+        nodeBoxes.push({
+          x: node.absX + node.containerConfig.paddingX,
+          y: node.absY + node.containerConfig.paddingY,
+          width: node.titleWidth,
+          height: node.titleHeight,
+        })
+      }
     }
   }
 
@@ -88,7 +98,10 @@ export function placeAllEdgeLabels(graph: GraphIR): void {
       const halfRatio = Math.min(0.45, (spanNeeded / 2 + 2) / len)
       const ratios =
         halfRatio >= 0.45
-          ? [0.5]
+          ? // Label is wider than the segment: it cannot fully sit on the wire.
+            // Try asymmetric positions so the pill can slide past a source/target
+            // node hugging the segment start/end instead of clipping its corner.
+            [0.5, 0.6, 0.4, 0.68, 0.32, 0.76, 0.24]
           : [0.5, 0.42, 0.58, 0.35, 0.65].filter(
               (r) => r >= halfRatio && r <= 1 - halfRatio,
             )
@@ -152,6 +165,13 @@ export function placeAllEdgeLabels(graph: GraphIR): void {
 
       let cost = cand.baseScore
 
+      // Prefer staying inside the canvas top/left boundary: unlike the
+      // right/bottom edges, the canvas cannot grow in these directions.
+      const outLeft = 4 - (cand.pt.x - lw / 2)
+      const outTop = 4 - (cand.pt.y - lh / 2)
+      if (outLeft > 0) cost += 3000 + outLeft * 50
+      if (outTop > 0) cost += 3000 + outTop * 50
+
       // High penalty for overlapping any node (hard overlap + soft 4px margin)
       for (const nb of nodeBoxes) {
         const hardArea = boxesOverlapArea(box, nb)
@@ -166,12 +186,6 @@ export function placeAllEdgeLabels(graph: GraphIR): void {
       }
 
       // Penalty for overlapping any already placed label
-      for (const lb of placedLabelBoxes) {
-        const area = boxesOverlapArea(inflate(box, 4), lb)
-        if (area > 0) {
-          cost += 6000 + area * 15
-        }
-      }
       for (const lb of placedLabelBoxes) {
         const area = boxesOverlapArea(inflate(box, 4), lb)
         if (area > 0) {

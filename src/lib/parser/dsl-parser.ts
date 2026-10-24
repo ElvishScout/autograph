@@ -32,6 +32,7 @@ const RESERVED_NODE_ATTRS = new Set([
   'anchor',
   'dx',
   'dy',
+  'title',
   'class',
   'style',
   'slot',
@@ -68,6 +69,8 @@ function parseContainerConfig(
 
   const explicitWidth = parseNumAttr(el, 'width')
   const explicitHeight = parseNumAttr(el, 'height')
+  const titleRaw = el.getAttribute('title')
+  const titleHtml = titleRaw && titleRaw.trim() !== '' ? titleRaw : undefined
 
   return {
     direction,
@@ -77,6 +80,7 @@ function parseContainerConfig(
     paddingY,
     explicitWidth,
     explicitHeight,
+    titleHtml,
   }
 }
 
@@ -362,6 +366,7 @@ export function parseGraphDSL(rootEl: Element): GraphIR {
                 : tplConfig.paddingY,
             explicitWidth: instConfig.explicitWidth ?? tplConfig.explicitWidth,
             explicitHeight: instConfig.explicitHeight ?? tplConfig.explicitHeight,
+            titleHtml: el.hasAttribute('title') ? instConfig.titleHtml : tplConfig.titleHtml,
           }
 
           const inner = parseContainerChildren(
@@ -411,6 +416,8 @@ export function parseGraphDSL(rootEl: Element): GraphIR {
             intrinsicHeight: 0,
             overlayWidth: 0,
             overlayHeight: 0,
+            titleWidth: 0,
+            titleHeight: 0,
             x: 0,
             y: 0,
             width: 0,
@@ -439,6 +446,8 @@ export function parseGraphDSL(rootEl: Element): GraphIR {
             intrinsicHeight: 0,
             overlayWidth: 0,
             overlayHeight: 0,
+            titleWidth: 0,
+            titleHeight: 0,
             x: 0,
             y: 0,
             width: 0,
@@ -474,6 +483,8 @@ export function parseGraphDSL(rootEl: Element): GraphIR {
               intrinsicHeight: 0,
               overlayWidth: 0,
               overlayHeight: 0,
+              titleWidth: 0,
+              titleHeight: 0,
               x: 0,
               y: 0,
               width: 0,
@@ -500,6 +511,8 @@ export function parseGraphDSL(rootEl: Element): GraphIR {
               intrinsicHeight: 0,
               overlayWidth: 0,
               overlayHeight: 0,
+              titleWidth: 0,
+              titleHeight: 0,
               x: 0,
               y: 0,
               width: 0,
@@ -527,14 +540,65 @@ export function parseGraphDSL(rootEl: Element): GraphIR {
 
   const rootParsed = parseContainerChildren(rootEl, '', rootConfig.direction)
 
-  return {
+  const graph: GraphIR = {
     config: rootConfig,
     overlayHtml: rootParsed.overlayHtml,
+    titleWidth: 0,
+    titleHeight: 0,
     nodes: rootParsed.nodes,
     edges: rootParsed.edges,
     nodeMap,
     allEdges,
     width: rootConfig.explicitWidth ?? 0,
     height: rootConfig.explicitHeight ?? 0,
+  }
+
+  validateReferences(graph)
+
+  return graph
+}
+
+/**
+ * Finds nodes whose localId matches the last dotted segment of an unresolved
+ * reference, to build a "did you mean" suggestion with its full scoped path.
+ */
+function findRefSuggestion(refId: string, nodeMap: Map<string, GraphNodeIR>): string | undefined {
+  const localName = refId.slice(refId.lastIndexOf('.') + 1)
+  for (const node of nodeMap.values()) {
+    if (node.localId === localName) return node.id
+  }
+  return undefined
+}
+
+function reportUnresolved(kind: string, rawRef: string, scopePrefix: string, nodeMap: Map<string, GraphNodeIR>) {
+  const suggestion = findRefSuggestion(rawRef, nodeMap)
+  const scoped = scopePrefix ? `${scopePrefix}.${rawRef}` : rawRef
+  const hint = suggestion
+    ? ` Did you mean "${suggestion}"? (references across containers need the dot prefix)`
+    : ''
+  console.error(
+    `[autograph] Unresolved ${kind} reference "${rawRef}" (resolved as "${scoped}"): no such node id.${hint}`,
+  )
+}
+
+/**
+ * Compile-time validation: every edge endpoint and every relative-position
+ * target must resolve to a known node id. Unresolved references used to fail
+ * silently (edge dropped, layout degraded); now they surface as errors.
+ */
+function validateReferences(graph: GraphIR): void {
+  for (const edge of graph.allEdges) {
+    if (!graph.nodeMap.has(edge.fromId)) {
+      reportUnresolved('edge "from"', edge.fromId, '', graph.nodeMap)
+    }
+    if (!graph.nodeMap.has(edge.toId)) {
+      reportUnresolved('edge "to"', edge.toId, '', graph.nodeMap)
+    }
+  }
+  for (const node of graph.nodeMap.values()) {
+    const spec = node.positionSpec
+    if (spec.mode === 'relative' && spec.targetId && !graph.nodeMap.has(spec.targetId)) {
+      reportUnresolved('target', spec.targetId, '', graph.nodeMap)
+    }
   }
 }

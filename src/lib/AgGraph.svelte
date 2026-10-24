@@ -9,8 +9,11 @@
   import { onMount, tick } from 'svelte'
   import type { GraphEdgeIR, GraphIR, GraphNodeIR } from './types'
   import { parseGraphDSL } from './parser/dsl-parser'
-  import { runLayoutEngine } from './layout/layout-engine'
-  import { routeAllEdges } from './router/astar-router'
+  import { runLayoutEngine, TITLE_CONTENT_GAP } from './layout/layout-engine'
+
+  /** Title bands hug the container top edge instead of consuming the full padding-y */
+  const TITLE_TOP_INSET = 12
+  import { routeAllEdges, buildRoundedOrthogonalSvgPath } from './router/astar-router'
   import { placeAllEdgeLabels } from './router/label-placer'
 
   let rootWrapEl: HTMLElement | undefined = $state()
@@ -25,12 +28,16 @@
   let rootPaddingX = $state(24)
   let rootPaddingY = $state(24)
   let rootOverlayHtml = $state('')
+  let rootTitleHtml = $state('')
+  let rootTitleOffsetY = $state(0)
   let flatNodes: GraphNodeIR[] = $state.raw([])
   let flatEdges: GraphEdgeIR[] = $state.raw([])
   let layoutReady = $state(false)
 
   const nodeMeasureEls = new Map<string, HTMLElement>()
   const labelMeasureEls = new Map<string, HTMLElement>()
+  const titleMeasureEls = new Map<string, HTMLElement>()
+  let rootTitleEl: HTMLElement | undefined = $state()
   let resizeObserver: ResizeObserver | null = null
   let rafId: number | null = null
 
@@ -42,9 +49,11 @@
     })
   }
 
-  function measureAction(el: HTMLElement, key: { type: 'node' | 'label'; id: string }) {
+  function measureAction(el: HTMLElement, key: { type: 'node' | 'label' | 'title'; id: string }) {
     if (key.type === 'node') {
       nodeMeasureEls.set(key.id, el)
+    } else if (key.type === 'title') {
+      titleMeasureEls.set(key.id, el)
     } else {
       labelMeasureEls.set(key.id, el)
     }
@@ -55,6 +64,8 @@
         resizeObserver?.unobserve(el)
         if (key.type === 'node') {
           nodeMeasureEls.delete(key.id)
+        } else if (key.type === 'title') {
+          titleMeasureEls.delete(key.id)
         } else {
           labelMeasureEls.delete(key.id)
         }
@@ -114,6 +125,34 @@
       }
     }
 
+    // Measure container title bands (title space is reserved by the layout engine)
+    for (const node of rawGraph.nodeMap.values()) {
+      if (!node.containerConfig.titleHtml) continue
+      const el = titleMeasureEls.get(node.id)
+      if (el) {
+        const w = Math.ceil(Math.max(el.scrollWidth, el.offsetWidth, el.getBoundingClientRect().width))
+        const h = Math.ceil(Math.max(el.scrollHeight, el.offsetHeight, el.getBoundingClientRect().height))
+        if (node.titleWidth !== w || node.titleHeight !== h) {
+          node.titleWidth = w
+          node.titleHeight = h
+          sizeChanged = true
+        }
+      }
+    }
+    if (rawGraph.config.titleHtml && rootTitleEl) {
+      const w = Math.ceil(
+        Math.max(rootTitleEl.scrollWidth, rootTitleEl.offsetWidth, rootTitleEl.getBoundingClientRect().width),
+      )
+      const h = Math.ceil(
+        Math.max(rootTitleEl.scrollHeight, rootTitleEl.offsetHeight, rootTitleEl.getBoundingClientRect().height),
+      )
+      if (rawGraph.titleWidth !== w || rawGraph.titleHeight !== h) {
+        rawGraph.titleWidth = w
+        rawGraph.titleHeight = h
+        sizeChanged = true
+      }
+    }
+
     for (const edge of rawGraph.allEdges) {
       if (edge.labelHtml) {
         const el = labelMeasureEls.get(edge.id)
@@ -139,6 +178,46 @@
     runLayoutEngine(rawGraph)
     routeAllEdges(rawGraph)
     placeAllEdgeLabels(rawGraph)
+
+    // The canvas can only grow right/bottom; labels (or routed edge geometry)
+    // poking out of the left/top boundary would be clipped by overflow:hidden.
+    // Shift the whole coordinate system so everything fits with a small margin.
+    const EDGE_MARGIN = 8
+    let minContentX = Infinity
+    let minContentY = Infinity
+    for (const edge of rawGraph.allEdges) {
+      for (const pt of edge.points) {
+        minContentX = Math.min(minContentX, pt.x)
+        minContentY = Math.min(minContentY, pt.y)
+      }
+      if (edge.labelHtml) {
+        minContentX = Math.min(minContentX, edge.labelX - edge.labelWidth / 2)
+        minContentY = Math.min(minContentY, edge.labelY - edge.labelHeight / 2)
+      }
+    }
+    const shiftX = minContentX < EDGE_MARGIN ? Math.ceil(EDGE_MARGIN - minContentX) : 0
+    const shiftY = minContentY < EDGE_MARGIN ? Math.ceil(EDGE_MARGIN - minContentY) : 0
+    if (shiftX !== 0 || shiftY !== 0) {
+      for (const node of rawGraph.nodeMap.values()) {
+        node.absX += shiftX
+        node.absY += shiftY
+      }
+      for (const edge of rawGraph.allEdges) {
+        for (const pt of edge.points) {
+          pt.x += shiftX
+          pt.y += shiftY
+        }
+        edge.labelX += shiftX
+        edge.labelY += shiftY
+        edge.svgPath = buildRoundedOrthogonalSvgPath(edge.points)
+      }
+      if (rawGraph.config.explicitWidth === undefined) {
+        rawGraph.width += shiftX
+      }
+      if (rawGraph.config.explicitHeight === undefined) {
+        rawGraph.height += shiftY
+      }
+    }
 
     // Expand canvas if any routed edge or label goes near/beyond the right/bottom boundary
     let maxCanvasX = rawGraph.width
@@ -172,6 +251,8 @@
     rootPaddingX = rawGraph.config.paddingX
     rootPaddingY = rawGraph.config.paddingY
     rootOverlayHtml = rawGraph.overlayHtml
+    rootTitleOffsetY =
+      rawGraph.titleHeight > 0 ? rawGraph.titleHeight + TITLE_CONTENT_GAP : 0
     flatNodes = updatedNodes.map((n) => ({ ...n }))
     flatEdges = rawGraph.allEdges.map((e) => ({ ...e }))
     layoutReady = true
@@ -186,6 +267,8 @@
     rootPaddingX = ir.config.paddingX
     rootPaddingY = ir.config.paddingY
     rootOverlayHtml = ir.overlayHtml
+    rootTitleHtml = ir.config.titleHtml ?? ''
+    rootTitleOffsetY = 0
     flatNodes = collectNodesDepthFirst(ir.nodes).map((n) => ({ ...n }))
     flatEdges = ir.allEdges.map((e) => ({ ...e }))
     layoutReady = false
@@ -288,11 +371,22 @@
       class:ag-ready={layoutReady}
       style={layoutReady ? `width: ${canvasWidth}px; height: ${canvasHeight}px;` : ''}
     >
-      <!-- Root overlay HTML (starts at root content area (0, 0) i.e. paddingX, paddingY) -->
+      <!-- Root title band (reserves space above the content area; hugs the top edge) -->
+      {#if rootTitleHtml}
+        <div
+          bind:this={rootTitleEl}
+          class="ag-container-title"
+          style="left: {rootPaddingX}px; top: {Math.min(rootPaddingY, TITLE_TOP_INSET)}px;"
+        >
+          {@html rootTitleHtml}
+        </div>
+      {/if}
+
+      <!-- Root overlay HTML (starts at root content area (0, 0) i.e. paddingX, paddingY + title band) -->
       {#if rootOverlayHtml}
         <div
           class="ag-root-overlay"
-          style="left: {rootPaddingX}px; top: {rootPaddingY}px;"
+          style="left: {rootPaddingX}px; top: {rootPaddingY + rootTitleOffsetY}px;"
         >
           {@html rootOverlayHtml}
         </div>
@@ -309,6 +403,16 @@
                 ? `left: ${node.absX}px; top: ${node.absY}px; width: ${node.width}px; height: ${node.height}px;`
                 : ''}; {node.styleText}"
             >
+              {#if node.containerConfig.titleHtml}
+                <div
+                  use:measureAction={{ type: 'title', id: node.id }}
+                  class="ag-container-title"
+                  style="left: {node.containerConfig.paddingX}px; top: {Math.min(node.containerConfig.paddingY, TITLE_TOP_INSET)}px;"
+                >
+                  {@html node.containerConfig.titleHtml}
+                </div>
+              {/if}
+
               {#if node.htmlContent}
                 <div
                   use:measureAction={{ type: 'node', id: node.id }}

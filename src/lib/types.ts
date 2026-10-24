@@ -33,6 +33,8 @@ export interface ContainerConfig {
   paddingY: number
   explicitWidth?: number
   explicitHeight?: number
+  /** Container title HTML rendered in a dedicated band above the content area */
+  titleHtml?: string
 }
 
 export interface NodePositionSpec {
@@ -82,6 +84,9 @@ export interface GraphNodeIR {
   /** Measured size of container overlay HTML (e.g. group/define badge) at (paddingX, paddingY) */
   overlayWidth: number
   overlayHeight: number
+  /** Measured size of the container title band (0 when no title) */
+  titleWidth: number
+  titleHeight: number
   /** Computed local position relative to parent content area (0, 0) */
   x: number
   y: number
@@ -119,6 +124,9 @@ export interface GraphIR {
   config: ContainerConfig
   /** Root level overlay HTML (non-DSL elements directly inside <ag-graph>) */
   overlayHtml: string
+  /** Measured size of the root canvas title band (0 when no title) */
+  titleWidth: number
+  titleHeight: number
   nodes: GraphNodeIR[]
   edges: GraphEdgeIR[]
   /** Flat map of all nodes by scoped ID */

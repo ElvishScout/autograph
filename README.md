@@ -86,12 +86,15 @@ npm run build
 | `padding-y` | `number` | `16`（根画布 `24`） | 容器上下内边距（px） |
 | `padding` | `number` | — | 同时设置 `padding-x` 和 `padding-y` 的简写 |
 | `width` / `height` | `number` | 自适应 | 显式指定容器宽高（px），省略时根据子节点包络盒自动计算 |
+| `title` | `string` | — | 容器标题，渲染在容器顶部专用标题带中并**自动参与布局**（为内容区上方预留空间），无需再给首个子节点硬编 `y` 偏移 |
 
 ---
 
 ### 4. 节点定位属性（适用于 `<node>`、`<group>` 及复合实例）
 
 所有定位属性完全正交，按需组合：
+
+> **混合定位语义**：带显式 `x`/`y`（absolute 模式）的兄弟节点会成为流向起点，auto 节点沿容器方向**接在它们之后**排列（不会退回原点重叠）；relative 节点始终跟随各自 `target` 链，不参与该起点计算。
 
 - **`x` / `y`**：相对于父容器内容区左上角 `(0, 0)` 的绝对坐标（px）。
 - **`target="nodeId[:targetAnchor]"`**：相对定位的目标节点 ID 及可选目标锚点。
@@ -115,6 +118,7 @@ npm run build
   - 同一个 `<group>` 或 `<define>` 内部引用兄弟节点时，直接使用局部 ID（如 `from="inbox:bottom" to="exec:top"`）；
   - 跨容器或从根级 `<ag-graph>` 引用容器内部子节点时，使用点号限定路径（如 `from="gateway.guard:bottom" to="rag_agent.inbox:top"`）；
   - 也可以直接连向容器整体（如 `from="gateway:bottom" to="orchestrator:top"`）。
+  - **未解析的 id 引用是编译期错误**：`from`/`to`/`target` 引用的 id 不存在时会输出 `console.error` 并给出修正建议（如提示 `to="mtp-emb:top"` → `to="mtp.mtp-emb:top"`），校验脚本会据此判失败，不再静默丢边。
 
 ---
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  const demo1Code = `<ag-graph direction="LR" gap-x="64" gap-y="44" padding="28">
+  const demo1Code = `<ag-graph direction="LR" gap-x="64" gap-y="44" padding="28" title="API 请求处理链路">
   <!-- 全自动拓扑节点 -->
   <node id="start">用户请求</node>
   <node id="auth">身份鉴权</node>
@@ -25,7 +25,7 @@
   <edge from="dispatch:top" to="monitor:bottom" line="dashed">上报指标</edge>
 </ag-graph>`
 
-  const demo2Code = `<ag-graph direction="LR" gap="56" padding="32">
+  const demo2Code = `<ag-graph direction="LR" gap="96" padding="32" title="跨节点绕障布线">
   <node id="a">起点节点 A</node>
   <node id="blocker" target="a:right">中间障碍物节点</node>
   <node id="b" target="blocker:right">终点节点 B</node>
@@ -40,10 +40,9 @@
 </ag-graph>`
 
   const demo3Code = `<ag-graph padding="28" gap-x="72" gap-y="48">
-  <!-- 定义可复用组合模板 worker，属性 title 为默认参数，内部含普通 HTML 叠加与 <slot> -->
+  <!-- 定义可复用组合模板 worker，title 为容器标题（自动预留顶部空间），内部含 <slot> 插槽 -->
   <define name="worker" title="默认服务" padding-x="20" padding-y="22" gap-x="48">
-    <div class="group-badge">$title</div>
-    <node id="in" y="20">输入队列</node>
+    <node id="in">输入队列</node>
     <node id="proc" target="in:right">
       <slot name="body">默认处理</slot>
     </node>
@@ -92,7 +91,7 @@
     </div>
 
     <div class="demo-preview">
-      <ag-graph direction="LR" gap-x="64" gap-y="44" padding="28">
+      <ag-graph direction="LR" gap-x="64" gap-y="44" padding="28" title="API 请求处理链路">
         <node id="start">用户请求</node>
         <node id="auth">身份鉴权</node>
         <node id="gateway">API 网关</node>
@@ -127,7 +126,7 @@
     </div>
 
     <div class="demo-preview">
-      <ag-graph direction="LR" gap="56" padding="32">
+      <ag-graph direction="LR" gap="96" padding="32" title="跨节点绕障布线">
         <node id="a">起点节点 A</node>
         <node id="blocker" target="a:right">中间障碍物节点</node>
         <node id="b" target="blocker:right">终点节点 B</node>
@@ -150,17 +149,16 @@
   <!-- 场景 3 -->
   <section class="demo-card">
     <div class="demo-info">
-      <h2>3. <code>&lt;define&gt;</code> 组合定义、<code>$param</code> 参数、<code>&lt;slot&gt;</code> 插槽与跨层级穿透连线</h2>
+      <h2>3. <code>&lt;define&gt;</code> 组合定义、容器 <code>title</code>、<code>&lt;slot&gt;</code> 插槽与跨层级穿透连线</h2>
       <p>
-        通过 <code>&lt;define name="worker"&gt;</code> 定义组合模板后，直接使用 <code>&lt;worker&gt;</code> 标签实例化；组合内部普通 HTML 与图元共用 <code>(0, 0)</code> 原点，連线既可连向组合整体（<code>to="w2:left"</code>），也可通过点号穿透连向内部子节点（<code>to="w1.in"</code>）。
+        通过 <code>&lt;define name="worker"&gt;</code> 定义组合模板后，直接使用 <code>&lt;worker&gt;</code> 标签实例化；<code>title</code> 是容器属性，渲染在组合顶部标题带并自动为内容预留空间（无需再硬编 <code>y</code> 偏移）；连线既可连向组合整体（<code>to="w2:left"</code>），也可通过点号穿透连向内部子节点（<code>to="w1.in"</code>）。
       </p>
     </div>
 
     <div class="demo-preview">
       <ag-graph padding="28" gap-x="72" gap-y="48">
         <define name="worker" title="默认服务" padding-x="20" padding-y="22" gap-x="48">
-          <div class="group-badge">$title</div>
-          <node id="in" y="20">输入队列</node>
+          <node id="in">输入队列</node>
           <node id="proc" target="in:right">
             <slot name="body">默认处理</slot>
           </node>
@@ -307,14 +305,12 @@
     color: #d97706 !important;
   }
 
-  :global(.group-badge) {
-    display: inline-block;
+  :global(.ag-container-title) {
     font-size: 11px;
     font-weight: 600;
     color: #475569;
     background: #e2e8f0;
     padding: 2px 8px;
     border-radius: 4px;
-    margin-top: -10px;
   }
 </style>

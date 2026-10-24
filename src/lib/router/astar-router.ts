@@ -719,6 +719,19 @@ function findOrthogonalPathAStar(
 export function routeAllEdges(graph: GraphIR): void {
   const allNodes = Array.from(graph.nodeMap.values())
 
+  // The root canvas title band is always a routing obstacle
+  const rootObstacles: { hard: Box[]; soft: Box[] } = { hard: [], soft: [] }
+  if (graph.titleWidth > 0 && graph.titleHeight > 0) {
+    const rootTitleBox: Box = {
+      x: graph.config.paddingX,
+      y: graph.config.paddingY,
+      width: graph.titleWidth,
+      height: graph.titleHeight,
+    }
+    rootObstacles.hard.push(inflateBox(rootTitleBox, OVERLAY_HARD_MARGIN))
+    rootObstacles.soft.push(inflateBox(rootTitleBox, OVERLAY_SOFT_MARGIN))
+  }
+
   const resolvedAnchors = new Map<
     string,
     { fromAnchor: AnchorName; toAnchor: AnchorName }
@@ -814,8 +827,8 @@ export function routeAllEdges(graph: GraphIR): void {
     const startStub = getStubPoint(startPort, fromAnchor, stubLen)
     const endStub = getStubPoint(endPort, toAnchor, stubLen)
 
-    const hardObstacles: Box[] = []
-    const softBuffers: Box[] = []
+    const hardObstacles: Box[] = [...rootObstacles.hard]
+    const softBuffers: Box[] = [...rootObstacles.soft]
     for (const node of allNodes) {
       // Container overlay HTML (such as group/define title badges like "SQL Agent") is ALWAYS an obstacle,
       // even when the container itself is an ancestor of srcNode or dstNode.
@@ -828,6 +841,19 @@ export function routeAllEdges(graph: GraphIR): void {
         }
         hardObstacles.push(inflateBox(overlayBox, OVERLAY_HARD_MARGIN))
         softBuffers.push(inflateBox(overlayBox, OVERLAY_SOFT_MARGIN))
+      }
+
+      // Container title band is ALWAYS an obstacle, even when the container
+      // itself is an ancestor of srcNode or dstNode.
+      if (node.titleWidth > 0 && node.titleHeight > 0) {
+        const titleBox: Box = {
+          x: node.absX + node.containerConfig.paddingX,
+          y: node.absY + node.containerConfig.paddingY,
+          width: node.titleWidth,
+          height: node.titleHeight,
+        }
+        hardObstacles.push(inflateBox(titleBox, OVERLAY_HARD_MARGIN))
+        softBuffers.push(inflateBox(titleBox, OVERLAY_SOFT_MARGIN))
       }
 
       if (node.id === srcNode.id || node.id === dstNode.id) continue
