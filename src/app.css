@@ -1,0 +1,175 @@
+:root {
+  --ag-bg: #f8fafc;
+  --ag-canvas-bg: #ffffff;
+  --ag-canvas-border: #e2e8f0;
+  --ag-node-bg: #ffffff;
+  --ag-node-border: #475569;
+  --ag-node-text: #0f172a;
+  --ag-container-bg: rgba(241, 245, 249, 0.65);
+  --ag-container-border: #94a3b8;
+  --ag-edge-color: #334155;
+  --ag-label-bg: #ffffff;
+  --ag-label-border: #cbd5e1;
+  --ag-label-text: #334155;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: #0f172a;
+  background-color: var(--ag-bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--ag-bg);
+  color: #0f172a;
+}
+
+#app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 28px 24px 64px;
+}
+
+/* ============================================================================
+ * <ag-graph> Web Component Default Styles (Light DOM, directly customizable)
+ * ============================================================================ */
+ag-graph {
+  display: inline-block;
+  vertical-align: top;
+}
+
+.ag-root-wrap {
+  display: inline-block;
+  position: relative;
+}
+
+.ag-canvas {
+  position: relative;
+  background-color: var(--ag-canvas-bg);
+  background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
+  background-size: 16px 16px;
+  overflow: hidden;
+  user-select: none;
+}
+
+.ag-canvas:not(.ag-ready) {
+  position: fixed;
+  left: -9999px;
+  top: -9999px;
+  width: 4000px;
+  height: 4000px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ag-root-overlay,
+.ag-container-overlay {
+  position: absolute;
+  width: max-content;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.ag-nodes-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.ag-node {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ag-node-bg);
+  border: 1.5px solid var(--ag-node-border);
+  border-radius: 8px;
+  color: var(--ag-node-text);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.06);
+  box-sizing: border-box;
+}
+
+.ag-node-measure {
+  display: inline-block;
+  width: max-content;
+  height: max-content;
+  padding: 8px 16px;
+  border: 1.5px solid transparent;
+  box-sizing: border-box;
+}
+
+.ag-container {
+  position: absolute;
+  background: var(--ag-container-bg);
+  border: 1.5px dashed var(--ag-container-border);
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+
+.ag-edges-svg {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: visible;
+  color: var(--ag-edge-color);
+}
+
+.ag-edge-halo {
+  stroke: var(--ag-canvas-bg);
+  stroke-width: 5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+
+.ag-edge-path {
+  stroke: currentColor;
+  stroke-width: 1.75px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ag-line-dashed {
+  stroke-dasharray: 6 4;
+}
+
+.ag-line-dotted {
+  stroke-dasharray: 2 4;
+}
+
+.ag-labels-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.ag-edge-label {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  background: var(--ag-label-bg);
+  border: 1px solid var(--ag-label-border);
+  border-radius: 999px;
+  color: var(--ag-label-text);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
