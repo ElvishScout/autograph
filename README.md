@@ -17,7 +17,7 @@ AutoGraph 是一个基于 **Svelte 5 + 原生 Web Component (`<ag-graph>`)** 构
   - 90° 纯正交端口引出与圆角折线；
   - 节点与容器标题（Overlay HTML）周围内置硬障碍区与软缓冲区，连线垂直插入端口并自动在通道中心线穿行；
   - 连线胶囊标签自动沿路径搜寻无碰撞位置，避开节点、标题与其他连线。
-- **单文件构建产物**：通过 `vite-plugin-singlefile` 一键打包出 `dist/index.html`（示例页）与 `dist/template.html`（仅含运行时与 `<!-- AUTOGRAPH_CONTENT -->` 占位符的单文件模板）。
+- **单文件运行时构建**：通过 Vite 多入口构建产出 `dist/autograph.js`（自包含默认样式与 `<ag-graph>` Web Component 运行时的独立脚本）及 `dist/index.html`（示例页）。
 
 ---
 
@@ -35,7 +35,7 @@ npm run dev
 # 类型检查
 npm run check
 
-# 构建单文件产物 (dist/index.html 与 dist/template.html)
+# 构建产物 (dist/index.html 与 dist/autograph.js)
 npm run build
 ```
 
@@ -168,6 +168,6 @@ src/
 │       └── label-placer.ts     # 连线标签自动避障布局器
 ├── App.svelte                  # 开发预览与示例页
 ├── main.ts                     # 示例页入口 (打包至 dist/index.html)
-├── template.ts                 # 纯运行时模板入口 (打包至 dist/template.html)
+├── runtime.ts                  # <ag-graph> 独立运行时入口 (打包至 dist/autograph.js)
 └── app.css                     # 默认样式变量与基础图层样式
 ```
